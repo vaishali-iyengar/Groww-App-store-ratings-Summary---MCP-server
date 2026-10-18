@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { KvAuditSink } from '../../src/audit/audit.js';
 import { KvTokenStore } from '../../src/auth/tokenStore.js';
-import { createKvFromEnv, KEY_PREFIX, MemoryKvStore, UpstashKvStore } from '../../src/storage/kv.js';
+import {
+  createKvFromEnv,
+  findKvCredentials,
+  KEY_PREFIX,
+  MemoryKvStore,
+  UpstashKvStore,
+} from '../../src/storage/kv.js';
 import { KvPendingStore } from '../../src/storage/pendingStore.js';
 import { createLogger } from '../../src/utils/logging.js';
 import { TEST_TOKEN } from '../helpers.js';
@@ -87,6 +93,45 @@ describe('UpstashKvStore', () => {
     expect(
       createKvFromEnv({ UPSTASH_REDIS_REST_URL: 'https://x.upstash.io', UPSTASH_REDIS_REST_TOKEN: 't' }),
     ).toBeInstanceOf(UpstashKvStore);
+  });
+});
+
+describe('findKvCredentials', () => {
+  const url = 'https://eu1-x.upstash.io';
+
+  it('accepts the custom prefix the Vercel integration allows, when URL and token share it', () => {
+    expect(findKvCredentials({ STORAGE_KV_REST_API_URL: url, STORAGE_KV_REST_API_TOKEN: 't' })).toMatchObject(
+      { kind: 'found', url, token: 't', urlVariable: 'STORAGE_KV_REST_API_URL' },
+    );
+    expect(
+      findKvCredentials({ MY_UPSTASH_REDIS_REST_URL: url, MY_UPSTASH_REDIS_REST_TOKEN: 't' }),
+    ).toMatchObject({ kind: 'found', url });
+    // A token under a different prefix, or only the read-only token, is not a match.
+    expect(findKvCredentials({ A_KV_REST_API_URL: url, B_KV_REST_API_TOKEN: 't' })).toEqual({
+      kind: 'missing',
+    });
+    expect(findKvCredentials({ KV_REST_API_URL: url, KV_REST_API_READ_ONLY_TOKEN: 't' })).toEqual({
+      kind: 'missing',
+    });
+  });
+
+  it('treats several names for the same database as one, but refuses to guess between databases', () => {
+    expect(
+      findKvCredentials({
+        S_KV_REST_API_URL: url,
+        S_KV_REST_API_TOKEN: 't',
+        S_UPSTASH_REDIS_REST_URL: url,
+        S_UPSTASH_REDIS_REST_TOKEN: 't',
+      }),
+    ).toMatchObject({ kind: 'found', url });
+    expect(
+      findKvCredentials({
+        A_KV_REST_API_URL: url,
+        A_KV_REST_API_TOKEN: 't',
+        B_KV_REST_API_URL: 'https://other.upstash.io',
+        B_KV_REST_API_TOKEN: 'u',
+      }),
+    ).toEqual({ kind: 'ambiguous', urlVariables: ['A_KV_REST_API_URL', 'B_KV_REST_API_URL'] });
   });
 });
 

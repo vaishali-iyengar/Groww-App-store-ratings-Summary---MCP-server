@@ -126,14 +126,44 @@ export class UpstashKvStore implements KvStore {
   }
 }
 
+const CREDENTIAL_SUFFIXES = [
+  { url: 'KV_REST_API_URL', token: 'KV_REST_API_TOKEN' },
+  { url: 'REDIS_REST_URL', token: 'REDIS_REST_TOKEN' },
+];
+
+export type KvCredentialLookup =
+  | { kind: 'found'; url: string; token: string; urlVariable: string }
+  | { kind: 'missing' }
+  /** Several different databases are configured; the variable names are listed so the operator can pick. */
+  | { kind: 'ambiguous'; urlVariables: string[] };
+
 /**
- * Returns an Upstash-backed store when its REST credentials are present: the names the Vercel
- * Marketplace integration injects (KV_REST_API_*) or Upstash's own (UPSTASH_REDIS_REST_*).
+ * Finds Upstash REST credentials: the names the Vercel Marketplace integration injects
+ * (KV_REST_API_*), Upstash's own (UPSTASH_REDIS_REST_*), or either with the custom prefix the
+ * integration lets you choose (e.g. STORAGE_KV_REST_API_URL). The URL and token must share a prefix.
  */
+export function findKvCredentials(env: NodeJS.ProcessEnv = process.env): KvCredentialLookup {
+  const candidates: { url: string; token: string; urlVariable: string }[] = [];
+  for (const name of Object.keys(env).sort()) {
+    for (const suffix of CREDENTIAL_SUFFIXES) {
+      if (!name.endsWith(suffix.url)) continue;
+      const url = env[name];
+      const token = env[name.slice(0, -suffix.url.length) + suffix.token];
+      if (url && token) candidates.push({ url, token, urlVariable: name });
+    }
+  }
+  const distinct = new Map(candidates.map((c) => [`${c.url}\n${c.token}`, c]));
+  if (distinct.size === 0) return { kind: 'missing' };
+  if (distinct.size > 1) return { kind: 'ambiguous', urlVariables: candidates.map((c) => c.urlVariable) };
+  return { kind: 'found', ...candidates[0]! };
+}
+
+/** Returns an Upstash-backed store when REST credentials are found (see findKvCredentials). */
 export function createKvFromEnv(env: NodeJS.ProcessEnv = process.env): KvStore | undefined {
-  const url = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
-  const token = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
-  if (!url || !token) return undefined;
+  const found = findKvCredentials(env);
+  if (found.kind !== 'found') return undefined;
   // Values are JSON strings we parse ourselves; automatic deserialization would turn them into objects.
-  return new UpstashKvStore(new Redis({ url, token, automaticDeserialization: false }));
+  return new UpstashKvStore(
+    new Redis({ url: found.url, token: found.token, automaticDeserialization: false }),
+  );
 }

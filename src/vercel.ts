@@ -4,7 +4,7 @@ import path from 'node:path';
 import { ConfigError, loadConfig } from './config/config.js';
 import { createDeps } from './container.js';
 import { createRequestHandler } from './http/httpServer.js';
-import { createKvFromEnv, type KvStore } from './storage/kv.js';
+import { createKvFromEnv, findKvCredentials, type KvStore } from './storage/kv.js';
 import { createLogger } from './utils/logging.js';
 
 const BUNDLED_POLICY = path.resolve('policy.json');
@@ -34,9 +34,13 @@ export function createVercelHandler(
 
   const issues: string[] = [];
   if (!kv) {
+    const lookup = findKvCredentials(env);
     issues.push(
-      'Vercel deployments need Upstash Redis: set KV_REST_API_URL and KV_REST_API_TOKEN ' +
-        '(or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN)',
+      lookup.kind === 'ambiguous'
+        ? `Several different Upstash Redis databases are configured (${lookup.urlVariables.join(', ')}); ` +
+            'keep only one connected to this project'
+        : 'Vercel deployments need Upstash Redis: set KV_REST_API_URL and KV_REST_API_TOKEN ' +
+            '(or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, optionally with a common prefix)',
     );
   }
   if (config.http.tokenHashes.size === 0) {
