@@ -9,7 +9,7 @@ import { sha256Hex } from '../../src/http/httpServer.js';
 import type { GoogleAuthProvider } from '../../src/integrations/google/oauthClient.js';
 import { KEY_PREFIX, MemoryKvStore } from '../../src/storage/kv.js';
 import { KvPendingStore } from '../../src/storage/pendingStore.js';
-import { createVercelHandler } from '../../src/vercel.js';
+import { createVercelEntry, createVercelHandler } from '../../src/vercel.js';
 import { createHarness, DOC_ID, type Harness } from '../helpers.js';
 
 /**
@@ -139,6 +139,23 @@ describe('Vercel handler', () => {
       /OAUTH_STATE_SECRET/,
     );
     expect(() => createVercelHandler({ ...env, OAUTH_STATE_SECRET: undefined }, kv)).toThrow(ConfigError);
+  });
+
+  it('answers every route with the configuration problems instead of crashing at startup', async () => {
+    const server = http.createServer(
+      createVercelEntry({ ...env, OAUTH_STATE_SECRET: '' }, new MemoryKvStore()),
+    );
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    try {
+      const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/healthz`);
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { problems: string[] };
+      expect(body).toMatchObject({ status: 'misconfigured', error: 'startup_failed' });
+      expect(body.problems.join(' ')).toMatch(/OAUTH_STATE_SECRET/);
+      expect(JSON.stringify(body)).not.toContain(KEY); // never echoes configured values
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
   });
 
   describe('served over HTTP', () => {

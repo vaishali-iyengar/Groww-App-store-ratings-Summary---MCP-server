@@ -50,3 +50,25 @@ export function createVercelHandler(
   const logger = createLogger(config.logLevel, { service: config.serverName });
   return createRequestHandler(createDeps(config, 'http', logger, kv));
 }
+
+/**
+ * Entry used by api/index.js. A startup failure is logged and then answered on every route with
+ * 503 and the list of problems, instead of crashing the function (which Vercel only reports as
+ * FUNCTION_INVOCATION_FAILED). Configuration errors name variables but never include their values.
+ */
+export function createVercelEntry(env: NodeJS.ProcessEnv = process.env, kv?: KvStore): RequestListener {
+  try {
+    return createVercelHandler(env, kv);
+  } catch (err) {
+    const problems =
+      err instanceof ConfigError
+        ? err.issues
+        : [`${(err as Error).name ?? 'Error'}: ${(err as Error).message ?? String(err)}`];
+    console.error(`Startup failed:\n  - ${problems.join('\n  - ')}`);
+    const body = JSON.stringify({ status: 'misconfigured', error: 'startup_failed', problems });
+    return (_req, res) => {
+      res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(body);
+    };
+  }
+}
