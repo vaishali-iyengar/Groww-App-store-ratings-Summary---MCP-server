@@ -1,0 +1,12 @@
+# Never upload local secrets or state; Vercel injects environment variables itself.
+.env
+.env.*
+!.env.example
+.data/
+*.tokens.json
+policy.local.json
+node_modules/
+dist/
+coverage/
+tests/
+.DS_Store

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "google-workspace": {
+      "command": "node",
+      "args": ["/absolute/path/to/google-workspace-mcp/dist/index.js"],
+      "env": {
+        "ENV_FILE": "/absolute/path/to/google-workspace-mcp/.env"
+      }
+    }
+  }
+}

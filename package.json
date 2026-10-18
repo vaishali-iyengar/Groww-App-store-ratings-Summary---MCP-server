@@ -1,0 +1,49 @@
+{
+  "name": "google-workspace-mcp",
+  "version": "1.0.0",
+  "description": "Agent-agnostic MCP server exposing Gmail send and Google Docs append tools",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "start:http": "node dist/index.js --transport=http",
+    "auth": "node dist/cli/auth.js",
+    "hash-token": "node dist/cli/hashToken.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "RUN_INTEGRATION=1 vitest run tests/integration",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build"
+  },
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@googleapis/docs": "^14.1.0",
+    "@googleapis/gmail": "^22.0.1",
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.0",
+    "@upstash/redis": "^1.39.0",
+    "google-auth-library": "^11.1.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.3.0",
+    "@types/node": "^26.6.4",
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  },
+  "bin": {
+    "google-workspace-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true
+}

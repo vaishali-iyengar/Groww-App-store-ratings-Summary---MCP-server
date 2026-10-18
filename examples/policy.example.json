@@ -1,0 +1,20 @@
+{
+  "gmail": {
+    "send": true,
+    "maxRecipients": 20,
+    "maxBodyBytes": 1000000,
+    "requireConfirmation": true,
+    "allowedRecipientDomains": [],
+    "blockedRecipientDomains": []
+  },
+  "googleDocs": {
+    "append": true,
+    "maxAppendBytes": 1000000,
+    "requireConfirmation": false,
+    "allowedDocumentIds": []
+  },
+  "confirmation": {
+    "mode": "auto",
+    "tokenTtlSeconds": 300
+  }
+}

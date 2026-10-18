@@ -1,0 +1,18 @@
+{
+  "gmail": {
+    "send": true,
+    "maxRecipients": 5,
+    "requireConfirmation": true,
+    "allowedRecipientDomains": [],
+    "blockedRecipientDomains": []
+  },
+  "googleDocs": {
+    "append": true,
+    "requireConfirmation": true,
+    "allowedDocumentIds": []
+  },
+  "confirmation": {
+    "mode": "token_only",
+    "tokenTtlSeconds": 300
+  }
+}

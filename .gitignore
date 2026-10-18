@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+# Local token / idempotency / audit data — never commit
+.data/
+*.tokens.json
+policy.local.json
+.DS_Store
+# Vercel CLI project link (vercel link)
+.vercel/

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "google-workspace": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token from npm run hash-token>" }
+    }
+  }
+}
