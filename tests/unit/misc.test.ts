@@ -71,6 +71,36 @@ describe('PolicyEngine', () => {
     );
   });
 
+  it('enforces an exact recipient allowlist without echoing addresses', () => {
+    const engine = new PolicyEngine(
+      mergePolicy(defaultPolicy(config), { gmail: { allowedRecipients: ['Owner@Example.com'] } }),
+    );
+    expect(() => engine.checkGmailSend(['owner@example.com'], 10)).not.toThrow();
+    expect(() => engine.checkGmailSend(['OWNER@example.com'], 10)).not.toThrow();
+    expect(() => engine.checkGmailSend(['someone@example.com'], 10)).toThrowError(
+      expect.objectContaining({ code: 'POLICY_BLOCKED', details: { blocked_recipient_count: 1 } }),
+    );
+    expect(() => engine.checkGmailSend(['owner@example.com', 'x@other.org'], 10)).toThrowError(
+      expect.objectContaining({ code: 'POLICY_BLOCKED' }),
+    );
+    // Same domain is not enough when an address allowlist is set.
+    expect(() => engine.checkGmailSend(['owner2@example.com'], 10)).toThrowError(
+      expect.objectContaining({ code: 'POLICY_BLOCKED' }),
+    );
+  });
+
+  it('loads the deployed policy.json with the recipient allowlist', async () => {
+    const { readFileSync } = await import('node:fs');
+    const deployed = JSON.parse(readFileSync('policy.json', 'utf8')) as unknown;
+    const engine = new PolicyEngine(mergePolicy(defaultPolicy(config), deployed));
+    expect(engine.policy.gmail.allowedRecipients).toEqual(['vaishu1996@gmail.com']);
+    expect(() => engine.checkGmailSend(['vaishu1996@gmail.com'], 10)).not.toThrow();
+    expect(() => engine.checkGmailSend(['anyone.else@gmail.com'], 10)).toThrowError(
+      expect.objectContaining({ code: 'POLICY_BLOCKED' }),
+    );
+    expect(engine.policy.gmail.requireConfirmation).toBe(true);
+  });
+
   it('enforces document allowlists, size limits and kill switches', () => {
     const engine = new PolicyEngine(
       mergePolicy(defaultPolicy(config), { googleDocs: { allowedDocumentIds: [DOC_ID], maxAppendBytes: 5 } }),

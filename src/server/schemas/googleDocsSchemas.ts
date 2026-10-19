@@ -68,6 +68,46 @@ export const appendOutput = z.object({
   request_id: z.string(),
 });
 
+export const createInput = z
+  .object({
+    title: z
+      .string()
+      .max(200)
+      .describe('Title of the new Google Doc (single line), e.g. "Weekly Note – Week of 2026-10-19".'),
+    content: z
+      .string()
+      .optional()
+      .describe(
+        'Optional plain text to put in the new document. Newlines create new paragraphs. Markdown/HTML is not interpreted. ' +
+          'More text can be added later with google_docs.append.',
+      ),
+    idempotency_key: idempotencyKey.optional(),
+    confirmation_token: confirmationToken.optional(),
+  })
+  .strict();
+
+export type CreateInput = z.output<typeof createInput>;
+
+export const createOutput = z.object({
+  success: z.literal(true),
+  operation: z.literal('google_docs.create'),
+  document_id: z.string().describe('ID of the new document; pass it to google_docs.append to add more text.'),
+  title: z.string(),
+  document_url: z.string(),
+  characters_inserted: z
+    .number()
+    .int()
+    .describe('Characters of initial content inserted, in UTF-16 code units (0 when no content was given).'),
+  revision_id: z.string().optional(),
+  idempotent_replay: z
+    .boolean()
+    .optional()
+    .describe(
+      'True when this is the stored result of an earlier call with the same idempotency_key; no new document was created.',
+    ),
+  request_id: z.string(),
+});
+
 export const metadataInput = z.object({ document_id: documentId }).strict();
 
 export const metadataOutput = z.object({
@@ -106,7 +146,10 @@ export const statusOutput = z.object({
     gmail_send_enabled: z.boolean(),
     gmail_requires_confirmation: z.boolean(),
     max_email_recipients: z.number().int(),
+    recipients_restricted_to_allowlist: z.boolean(),
     docs_append_enabled: z.boolean(),
+    docs_create_enabled: z.boolean(),
+    docs_restricted_to_created_documents: z.boolean(),
     docs_requires_confirmation: z.boolean(),
     docs_restricted_to_allowlist: z.boolean(),
   }),

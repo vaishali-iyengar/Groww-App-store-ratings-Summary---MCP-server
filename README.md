@@ -17,6 +17,7 @@ The full requirements are in [problem-statement(MCP).md](problem-statement(MCP).
 |---|---|---|
 | `gmail_send_email` | `gmail.send_email` | Sends a plain-text or HTML email with To/Cc/Bcc and optional threading. **External side effect.** |
 | `google_docs_append` | `google_docs.append` | Appends text to the end of a document or a specific tab, with optional separator, heading and timestamp. Never overwrites. **External write.** |
+| `google_docs_create` | `google_docs.create` | Creates a new Google Doc, optionally with initial plain-text content, and returns its ID and link. Off unless policy enables it. **External write.** |
 | `google_docs_get_metadata` | `google_docs.get_metadata` | Read-only. Returns title, revision and tabs (no content) so the agent can confirm the target. |
 | `connection_get_status` | `connection.get_status` | Read-only. Reports whether Google is authorized, for which account and with which capabilities. Never returns credentials. |
 
@@ -39,6 +40,27 @@ Every result is structured (`structuredContent` plus a JSON text fallback):
 Error codes: `AUTHENTICATION_REQUIRED`, `AUTHORIZATION_DENIED`, `INVALID_INPUT`, `INVALID_RECIPIENT`, `INVALID_DOCUMENT`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_ACCESS_DENIED`, `GOOGLE_API_ERROR`, `RATE_LIMITED`, `NETWORK_ERROR`, `DUPLICATE_REQUEST`, `POLICY_BLOCKED`, `CONFIRMATION_REQUIRED`, `INTERNAL_ERROR`.
 
 Input that fails schema validation, such as a missing required field, an unknown field or an unsupported `content_type`, is rejected by the MCP SDK before the tool runs. Those rejections come back as a standard MCP tool error (`isError: true` with a text explanation) rather than in the structured format above.
+
+## Weekly note
+
+The server provides an MCP prompt, `weekly_note`, which MCP apps show as a ready-made command. It has three optional arguments: `notes` (your raw updates), `week_of` (a Monday, `YYYY-MM-DD`) and `recipient`. The prompt tells the AI app to:
+
+1. write a plain-text, one-page note (at most 3,500 characters) with the sections Highlights, Progress, Challenges / Risks and Next Week
+2. show it to you for approval
+3. if `SUMMARY_DOC_ID` is set, add it to the end of that Google Doc with `google_docs_append`, under the heading `Weekly Note – Week of <Monday> — <date and time>` and separated from the previous entry by a blank line (idempotency key `weekly-doc-<Monday>`)
+4. email it with `gmail_send_email` to `WEEKLY_NOTE_RECIPIENT`, with the subject `Weekly Note – Week of <Monday>` (idempotency key `weekly-note-<Monday>`)
+
+The AI app writes the note; the server never generates content. The server enforces the rules through [policy.json](policy.json):
+
+- Only `vaishu1996@gmail.com` can receive mail (`allowedRecipients`, `maxRecipients: 1`).
+- The email body is capped at 5,000 bytes (`maxBodyBytes`), so a note longer than about one page is rejected.
+- Every email needs confirmation (`gmail.requireConfirmation`). Doc appends don't (`googleDocs.requireConfirmation: false`), because appends never change existing text.
+- `googleDocs.create: true` lets the agent create Docs with `google_docs_create`. With `restrictToCreatedDocuments: true`, the server can only read or append to Docs it created itself, plus any listed in `allowedDocumentIds`. Your other documents stay out of reach.
+- Alternatively, put an existing Doc's ID in `googleDocs.allowedDocumentIds` and set `SUMMARY_DOC_ID` to it.
+
+The idempotency keys mean that retrying a week's note within `IDEMPOTENCY_TTL_SECONDS` (24 hours by default) returns the original result instead of adding or sending it again.
+
+**Setup:** either let the agent create the Doc with `google_docs_create`, or create it yourself, signed in as the authorized account, and set `SUMMARY_DOC_ID` to its ID or URL. Locally, also set `POLICY_FILE` to the path of `policy.json`; the Vercel deployment loads it automatically. Timestamps use `TIMESTAMP_TIMEZONE`.
 
 ## Architecture
 
@@ -160,11 +182,13 @@ Set `POLICY_FILE` to a JSON file (see [examples/policy.example.json](examples/po
 ```json
 {
   "gmail": { "send": true, "maxRecipients": 20, "requireConfirmation": true,
-             "allowedRecipientDomains": ["example.com"], "blockedRecipientDomains": [] },
+             "allowedRecipients": [], "allowedRecipientDomains": ["example.com"], "blockedRecipientDomains": [] },
   "googleDocs": { "append": true, "requireConfirmation": false, "allowedDocumentIds": [] },
   "confirmation": { "mode": "auto", "tokenTtlSeconds": 300 }
 }
 ```
+
+- `allowedRecipients` lists exact addresses (case-insensitive). When it isn't empty, every To/Cc/Bcc recipient must be on it, in addition to the domain rules. Blocked addresses are reported as a count, never echoed back.
 
 How confirmation works depends on `confirmation.mode`:
 

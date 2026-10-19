@@ -1,14 +1,20 @@
 {
   "gmail": {
     "send": true,
-    "maxRecipients": 5,
+    "maxRecipients": 1,
+    "maxBodyBytes": 5000,
     "requireConfirmation": true,
+    "allowedRecipients": [
+      "vaishu1996@gmail.com"
+    ],
     "allowedRecipientDomains": [],
     "blockedRecipientDomains": []
   },
   "googleDocs": {
     "append": true,
-    "requireConfirmation": true,
+    "create": true,
+    "restrictToCreatedDocuments": true,
+    "requireConfirmation": false,
     "allowedDocumentIds": []
   },
   "confirmation": {

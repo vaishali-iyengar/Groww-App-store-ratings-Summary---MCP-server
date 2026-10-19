@@ -16,6 +16,8 @@ export interface DocsApi {
     requests: docs_v1.Schema$Request[],
     writeControl?: docs_v1.Schema$WriteControl,
   ): Promise<docs_v1.Schema$BatchUpdateDocumentResponse>;
+  /** Creates a new, empty document owned by the user. Must NOT retry internally (duplicate-document risk). */
+  createDocument(userId: string, title: string): Promise<docs_v1.Schema$Document>;
 }
 
 export class GoogleDocsApi implements DocsApi {
@@ -50,6 +52,16 @@ export class GoogleDocsApi implements DocsApi {
         { documentId, requestBody: { requests, ...(writeControl ? { writeControl } : {}) } },
         { retry: false },
       );
+      return res.data;
+    } catch (err) {
+      throw mapGoogleError(err, 'docs');
+    }
+  }
+
+  async createDocument(userId: string, title: string): Promise<docs_v1.Schema$Document> {
+    const api = await this.client(userId);
+    try {
+      const res = await api.documents.create({ requestBody: { title } }, { retry: false });
       return res.data;
     } catch (err) {
       throw mapGoogleError(err, 'docs');

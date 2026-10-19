@@ -20,6 +20,7 @@ import { createMcpServer } from '../src/server/mcpServer.js';
 import type { KvStore } from '../src/storage/kv.js';
 import { KvPendingStore } from '../src/storage/pendingStore.js';
 import { InMemoryIdempotencyStore, KvIdempotencyStore } from '../src/utils/idempotency.js';
+import { InMemoryCreatedDocsRegistry, KvCreatedDocsRegistry } from '../src/storage/createdDocs.js';
 import { createLogger } from '../src/utils/logging.js';
 
 export const DOC_ID = '1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789';
@@ -83,6 +84,18 @@ export class FakeDocs implements DocsApi {
 
   addDocument(id: string, title: string, tabs: FakeTab[]): void {
     this.documents.set(id, { title, revision: 1, tabs });
+  }
+
+  readonly created: { userId: string; documentId: string; title: string }[] = [];
+  readonly createFailures: unknown[] = [];
+
+  async createDocument(userId: string, title: string): Promise<docs_v1.Schema$Document> {
+    const failure = this.createFailures.shift();
+    if (failure) throw failure;
+    const documentId = `1CreatedDoc${(this.created.length + 1).toString().padStart(20, '0')}`;
+    this.addDocument(documentId, title, [{ id: 't.0', title: 'Tab 1', text: '\n' }]);
+    this.created.push({ userId, documentId, title });
+    return { documentId, title, revisionId: 'rev1' };
   }
 
   private access(userId: string, documentId: string) {
@@ -219,6 +232,7 @@ export function buildDeps(opts: HarnessOptions = {}) {
     oauthFlow: undefined,
     gmail,
     docs,
+    createdDocs: opts.kv ? new KvCreatedDocsRegistry(opts.kv) : new InMemoryCreatedDocsRegistry(),
     idempotency: opts.kv ? new KvIdempotencyStore(opts.kv) : new InMemoryIdempotencyStore(),
     policy: new PolicyEngine(policy),
     confirmations: new ConfirmationService(

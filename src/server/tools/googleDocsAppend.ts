@@ -66,9 +66,10 @@ async function handler(args: AppendInput, tc: ToolContext) {
       content_sha256: hashRequest({ content: args.content, heading: args.heading }),
       ...extra,
     });
+  const createdByServer = await deps.createdDocs.has(user.userId, documentId);
   const checkPolicy = async (bytes: number) => {
     try {
-      deps.policy.checkDocsAppend(documentId, bytes);
+      deps.policy.checkDocsAppend(documentId, bytes, createdByServer);
     } catch (err) {
       await audit('blocked', { error_code: (err as AppError).code });
       throw err;

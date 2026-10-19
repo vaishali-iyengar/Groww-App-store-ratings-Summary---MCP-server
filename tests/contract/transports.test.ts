@@ -32,7 +32,7 @@ describe('stdio transport (built server, spawned like any MCP host would)', () =
     await client.connect(transport);
     try {
       const { tools } = await client.listTools();
-      expect(tools).toHaveLength(4);
+      expect(tools).toHaveLength(5);
       const status = (await client.callTool({ name: 'connection_get_status', arguments: {} })) as {
         structuredContent: Record<string, unknown>;
       };

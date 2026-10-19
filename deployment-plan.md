@@ -24,6 +24,7 @@ Vercel runs the server as short-lived function instances. Memory and the filesys
 | Confirmation tokens | `Map` in `ConfirmationService` | Confirming call lands on another instance → `confirmation_token is invalid` | `KvPendingStore` (single use via `GETDEL`) |
 | OAuth `state` / PKCE verifier | `Map` in `OAuthFlow` | Google redirect lands on another instance → "authorization link is invalid" | `KvPendingStore` |
 | Audit log | `DATA_DIR/audit.log` | Lost | `KvAuditSink` (capped list `gwmcp:audit`) |
+| Documents created by the server | `DATA_DIR/created-docs.json` | `restrictToCreatedDocuments` blocks appends to a Doc the server just created | `KvCreatedDocsRegistry` (`gwmcp:created-doc:<user-hash>:<doc-id>`) |
 | Rate-limit windows | `Map` in `RateLimiter` | Per-instance only | Unchanged (tolerable; see §7) |
 
 `/mcp` already used the SDK's fetch-style `createMcpHandler`, which builds a fresh server per request. That part was always stateless.
@@ -115,6 +116,8 @@ npm run build && npm run hash-token -- <your-user-id>    # prints the bearer tok
 | `MCP_HTTP_TOKEN_HASHES` | `<user>:<sha256>` entries, comma-separated. **Hashes only**; keep the raw tokens in a password manager. |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Injected by the Upstash integration (step 4) |
 | `LOG_LEVEL`, `LOG_RECIPIENTS`, `TIMESTAMP_TIMEZONE`, `TOOL_NAME_STYLE` | Optional: `info`, `hash`, `UTC`, `underscore` |
+| `WEEKLY_NOTE_RECIPIENT` | Optional: default recipient suggested by the `weekly_note` prompt, e.g. `vaishu1996@gmail.com`. Who may actually receive mail is decided by `policy.json` (`allowedRecipients`). |
+| `SUMMARY_DOC_ID` | Optional: an existing Doc the `weekly_note` prompt appends to. Leave unset when the agent creates Docs with `google_docs_create`. |
 
 Defaults from `src/vercel.ts` cover these, so **don't add them**: `MCP_HTTP_HOST`, `MCP_PUBLIC_BASE_URL` (unless you use a custom domain), `DATA_DIR`, `POLICY_FILE`. In particular, don't copy `MCP_HTTP_HOST=127.0.0.1` or local paths from your `.env`.
 
@@ -145,13 +148,16 @@ Or push to a private GitHub repo and import it in Vercel. Before the first commi
 | Function logs on first request | No `Invalid configuration` error |
 | `curl https://<host>/healthz` | `{"status":"ok"}`, which also proves the rewrite keeps the path |
 | `curl -X POST https://<host>/mcp` | `401` with `WWW-Authenticate: Bearer` |
-| `npx @modelcontextprotocol/inspector` → Streamable HTTP → `https://<host>/mcp`, header `Authorization: Bearer <token>` | 4 tools listed |
+| `npx @modelcontextprotocol/inspector` → Streamable HTTP → `https://<host>/mcp`, header `Authorization: Bearer <token>` | 5 tools (`gmail_send_email`, `google_docs_create`, `google_docs_append`, `google_docs_get_metadata`, `connection_get_status`) and 1 prompt (`weekly_note`) listed |
 | `connection_get_status` | `authorization_required: true` + an `authorization_url` whose `redirect_uri` is `https://<host>/oauth2/callback` |
 | Open that URL, consent | "Google account connected"; `connection_get_status` now shows your email |
-| `google_docs_append` on a test Doc | `CONFIRMATION_REQUIRED` → repeat with `confirmation_token` → `success: true` |
+| `google_docs_create` with a title and content | `success: true` with a `document_id` (no confirmation: `googleDocs.requireConfirmation` is `false`) |
+| `google_docs_append` to that `document_id` | `success: true`; the text is at the end of the Doc |
+| `google_docs_append` to a Doc the server didn't create | `POLICY_BLOCKED` (`restrictToCreatedDocuments`) |
+| `gmail_send_email` to `vaishu1996@gmail.com` | `CONFIRMATION_REQUIRED` → repeat with `confirmation_token` → `success: true` |
 | Same `confirmation_token` again | `confirmation_token is invalid, expired, or already used` |
 | `gmail_send_email` to an allowed address, then the identical call again | sent once; second call → `DUPLICATE_REQUEST` |
-| Send to a non-allowed domain | `POLICY_BLOCKED` |
+| Send to any address other than `vaishu1996@gmail.com`, or a body over 5,000 bytes | `POLICY_BLOCKED` |
 | Redeploy, then `connection_get_status` | still authorized (token is in Redis) |
 
 Client configuration (see [examples/mcp-config.http.json](examples/mcp-config.http.json)):

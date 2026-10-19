@@ -11,13 +11,14 @@ afterEach(async () => {
 const email = { to: ['person@example.com'], subject: 'Meeting notes', body: 'Hi, sharing the notes.' };
 
 describe('discovery', () => {
-  it('lists the four semantic tools with machine-readable schemas', async () => {
+  it('lists the five semantic tools with machine-readable schemas', async () => {
     h = await createHarness();
     const { tools } = await h.client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'connection_get_status',
       'gmail_send_email',
       'google_docs_append',
+      'google_docs_create',
       'google_docs_get_metadata',
     ]);
     const send = tools.find((t) => t.name === 'gmail_send_email')!;

@@ -4,11 +4,14 @@
     "maxRecipients": 20,
     "maxBodyBytes": 1000000,
     "requireConfirmation": true,
+    "allowedRecipients": [],
     "allowedRecipientDomains": [],
     "blockedRecipientDomains": []
   },
   "googleDocs": {
     "append": true,
+    "create": true,
+    "restrictToCreatedDocuments": true,
     "maxAppendBytes": 1000000,
     "requireConfirmation": false,
     "allowedDocumentIds": []

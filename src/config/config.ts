@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
+import { isValidEmail, parseDocumentId } from '../utils/validation.js';
 
 export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 export const DOCS_SCOPE = 'https://www.googleapis.com/auth/documents';
@@ -44,6 +45,8 @@ const envSchema = z.object({
   TIMESTAMP_TIMEZONE: z.string().default('UTC'),
 
   POLICY_FILE: z.string().optional(),
+  WEEKLY_NOTE_RECIPIENT: z.string().optional(),
+  SUMMARY_DOC_ID: z.string().optional(),
 
   MCP_HTTP_HOST: z.string().default('127.0.0.1'),
   MCP_HTTP_PORT: z.coerce.number().int().min(0).max(65535).default(3000),
@@ -92,6 +95,10 @@ export interface Config {
   autoDedupeWindowSeconds: number;
   timestampTimezone: string;
   policyFile: string | undefined;
+  /** Default recipient suggested by the weekly_note prompt. Policy still decides who may receive mail. */
+  weeklyNoteRecipient: string | undefined;
+  /** Google Doc the weekly_note prompt appends each summary to. Policy still decides which docs are writable. */
+  summaryDocId: string | undefined;
   http: HttpConfig;
 }
 
@@ -178,6 +185,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (e.TOKEN_STORE_ENCRYPTION_KEY && e.TOKEN_STORE_ENCRYPTION_KEY.length < 32) {
     issues.push('TOKEN_STORE_ENCRYPTION_KEY must be at least 32 characters (e.g. `openssl rand -base64 32`)');
   }
+  if (e.WEEKLY_NOTE_RECIPIENT && !isValidEmail(e.WEEKLY_NOTE_RECIPIENT.trim())) {
+    issues.push('WEEKLY_NOTE_RECIPIENT must be a plain email address');
+  }
+  let summaryDocId: string | undefined;
+  if (e.SUMMARY_DOC_ID) {
+    try {
+      summaryDocId = parseDocumentId(e.SUMMARY_DOC_ID);
+    } catch {
+      issues.push('SUMMARY_DOC_ID must be a Google Docs document ID or docs.google.com document URL');
+    }
+  }
   if (!isValidTimeZone(e.TIMESTAMP_TIMEZONE)) {
     issues.push('TIMESTAMP_TIMEZONE must be a valid IANA time zone (e.g. UTC, Asia/Kolkata)');
   }
@@ -209,6 +227,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     autoDedupeWindowSeconds: e.AUTO_DEDUPE_WINDOW_SECONDS,
     timestampTimezone: e.TIMESTAMP_TIMEZONE,
     policyFile: e.POLICY_FILE,
+    weeklyNoteRecipient: e.WEEKLY_NOTE_RECIPIENT?.trim(),
+    summaryDocId,
     http: {
       host: e.MCP_HTTP_HOST,
       port: e.MCP_HTTP_PORT,

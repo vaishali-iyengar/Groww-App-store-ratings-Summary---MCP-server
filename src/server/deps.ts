@@ -8,6 +8,7 @@ import type { GoogleAuthProvider } from '../integrations/google/oauthClient.js';
 import type { Metrics } from '../observability/metrics.js';
 import type { ConfirmationService } from '../policy/confirmation.js';
 import type { PolicyEngine } from '../policy/policy.js';
+import type { CreatedDocsRegistry } from '../storage/createdDocs.js';
 import type { IdempotencyStore } from '../utils/idempotency.js';
 import type { Logger } from '../utils/logging.js';
 
@@ -24,6 +25,8 @@ export interface ServerDeps {
   oauthFlow: OAuthFlow | undefined;
   gmail: GmailApi;
   docs: DocsApi;
+  /** Documents this server created, per user (see policy googleDocs.restrictToCreatedDocuments). */
+  createdDocs: CreatedDocsRegistry;
   idempotency: IdempotencyStore;
   policy: PolicyEngine;
   confirmations: ConfirmationService;

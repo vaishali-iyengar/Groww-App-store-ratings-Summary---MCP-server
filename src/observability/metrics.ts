@@ -25,6 +25,7 @@ export class Metrics {
     this.describe('idempotency_events_total', 'Duplicate / replay events');
     this.describe('gmail_emails_sent_total', 'Emails sent');
     this.describe('docs_appends_total', 'Document append operations');
+    this.describe('docs_creates_total', 'Documents created');
   }
 
   private describe(name: string, text: string): void {

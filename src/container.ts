@@ -15,6 +15,7 @@ import { Metrics } from './observability/metrics.js';
 import { ConfirmationService } from './policy/confirmation.js';
 import { loadPolicy, PolicyEngine } from './policy/policy.js';
 import type { ServerDeps } from './server/deps.js';
+import { FileCreatedDocsRegistry, KvCreatedDocsRegistry } from './storage/createdDocs.js';
 import { createKvFromEnv, type KvStore } from './storage/kv.js';
 import { KvPendingStore } from './storage/pendingStore.js';
 import { FileIdempotencyStore, KvIdempotencyStore } from './utils/idempotency.js';
@@ -60,6 +61,7 @@ export function createDeps(
         : undefined,
     gmail: new GoogleGmailApi(auth),
     docs: new GoogleDocsApi(auth),
+    createdDocs: kv ? new KvCreatedDocsRegistry(kv) : new FileCreatedDocsRegistry(config.dataDir),
     idempotency: kv ? new KvIdempotencyStore(kv) : new FileIdempotencyStore(config.dataDir),
     policy: new PolicyEngine(policy),
     confirmations: new ConfirmationService(

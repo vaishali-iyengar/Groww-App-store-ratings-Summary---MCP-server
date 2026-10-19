@@ -20,7 +20,7 @@ export const googleDocsMetadataTool: ToolDefinition<typeof metadataInput> = {
   handler: async (args, tc) => {
     const { deps, user } = tc;
     const documentId = parseDocumentId(args.document_id);
-    deps.policy.checkDocsRead(documentId);
+    deps.policy.checkDocsRead(documentId, await deps.createdDocs.has(user.userId, documentId));
     const doc = await withRetry(
       () =>
         deps.metrics.time('google_api_latency_ms', { service: 'docs' }, () =>

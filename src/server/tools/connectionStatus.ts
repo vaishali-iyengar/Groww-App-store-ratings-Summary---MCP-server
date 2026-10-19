@@ -10,7 +10,7 @@ export const connectionStatusTool: ToolDefinition<typeof statusInput> = {
   title: 'Google connection status',
   description:
     'Read-only. Report whether Google authorization is configured for the current user, which capabilities ' +
-    '(Gmail send, Google Docs) are available, and which Google account is authorized. Never returns credentials. ' +
+    '(Gmail send, Google Docs append/create) are available, and which Google account is authorized. Never returns credentials. ' +
     'Call this first if another tool fails with AUTHENTICATION_REQUIRED.',
   inputSchema: statusInput,
   outputSchema: statusOutput,
@@ -70,7 +70,10 @@ export const connectionStatusTool: ToolDefinition<typeof statusInput> = {
         gmail_send_enabled: p.gmail.send,
         gmail_requires_confirmation: p.gmail.requireConfirmation,
         max_email_recipients: p.gmail.maxRecipients,
+        recipients_restricted_to_allowlist: p.gmail.allowedRecipients.length > 0,
         docs_append_enabled: p.googleDocs.append,
+        docs_create_enabled: p.googleDocs.create,
+        docs_restricted_to_created_documents: p.googleDocs.restrictToCreatedDocuments,
         docs_requires_confirmation: p.googleDocs.requireConfirmation,
         docs_restricted_to_allowlist: p.googleDocs.allowedDocumentIds.length > 0,
       },

@@ -46,6 +46,15 @@ This is not a full MCP OAuth 2.1 authorization server with dynamic client regist
 
 **Linking risk:** anyone who obtains a user's unexpired `authorization_url` could link *their own* Google account to that user's slot. The URL is short-lived and single-use. `connection.get_status` shows which account is linked.
 
+## 6a. Creating documents (beyond the original spec)
+
+The problem statement lists creating Google Docs as an MVP non-goal (§5). It was added at the user's request as `google_docs.create`, with these guards:
+
+- **Off by default.** `googleDocs.create` must be enabled in policy.
+- **No new permission.** The `documents` scope already covers creating documents.
+- **Lock-down.** With `googleDocs.restrictToCreatedDocuments`, the server can only read or append to documents it created for that user, plus any in `allowedDocumentIds`. Created document IDs are recorded per user, in `DATA_DIR/created-docs.json` locally or in the shared KV store on Vercel.
+- **No duplicates.** Creation is never retried automatically. If the document is created but inserting its initial content fails, the error returns the new `document_id`, the create is marked as done, and the agent finishes with `google_docs.append` instead of creating a second document.
+
 ## 7. Append text layout
 
 The appended block is laid out as `[separator][timestamp/heading line][content]`. The separator comes first so new text never runs into the document's last paragraph. It is skipped when the target tab is empty. `custom_separator` is inserted verbatim. The heading is plain text: §21 rules out interpreting formatting in the MVP.

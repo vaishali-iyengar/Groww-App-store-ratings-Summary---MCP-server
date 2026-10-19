@@ -13,6 +13,8 @@ const policyFileSchema = z
         maxRecipients: z.number().int().positive(),
         maxBodyBytes: z.number().int().positive(),
         requireConfirmation: z.boolean(),
+        /** Exact addresses allowed as recipients (case-insensitive). Empty means no address restriction. */
+        allowedRecipients: z.array(z.string()),
         allowedRecipientDomains: z.array(z.string()),
         blockedRecipientDomains: z.array(z.string()),
       })
@@ -21,6 +23,13 @@ const policyFileSchema = z
     googleDocs: z
       .object({
         append: z.boolean(),
+        /** Allows google_docs.create. Off unless enabled: creating documents is beyond the original spec. */
+        create: z.boolean(),
+        /**
+         * When true, documents can only be read or appended to if this server created them
+         * (or they are listed in allowedDocumentIds).
+         */
+        restrictToCreatedDocuments: z.boolean(),
         maxAppendBytes: z.number().int().positive(),
         requireConfirmation: z.boolean(),
         allowedDocumentIds: z.array(z.string()),
@@ -49,11 +58,14 @@ export interface Policy {
     maxRecipients: number;
     maxBodyBytes: number;
     requireConfirmation: boolean;
+    allowedRecipients: string[];
     allowedRecipientDomains: string[];
     blockedRecipientDomains: string[];
   };
   googleDocs: {
     append: boolean;
+    create: boolean;
+    restrictToCreatedDocuments: boolean;
     maxAppendBytes: number;
     requireConfirmation: boolean;
     allowedDocumentIds: string[];
@@ -68,11 +80,14 @@ export function defaultPolicy(config: Config): Policy {
       maxRecipients: config.limits.maxEmailRecipients,
       maxBodyBytes: config.limits.maxEmailBodyBytes,
       requireConfirmation: false,
+      allowedRecipients: [],
       allowedRecipientDomains: [],
       blockedRecipientDomains: [],
     },
     googleDocs: {
       append: true,
+      create: false,
+      restrictToCreatedDocuments: false,
       maxAppendBytes: config.limits.maxDocAppendBytes,
       requireConfirmation: false,
       allowedDocumentIds: [],
@@ -94,6 +109,8 @@ export function mergePolicy(base: Policy, overrides: unknown): Policy {
     gmail: {
       ...base.gmail,
       ...o.gmail,
+      allowedRecipients:
+        o.gmail?.allowedRecipients?.map((a) => a.trim().toLowerCase()) ?? base.gmail.allowedRecipients,
       allowedRecipientDomains: lower(o.gmail?.allowedRecipientDomains) ?? base.gmail.allowedRecipientDomains,
       blockedRecipientDomains: lower(o.gmail?.blockedRecipientDomains) ?? base.gmail.blockedRecipientDomains,
     },
@@ -131,6 +148,19 @@ export class PolicyEngine {
         details: { max_body_bytes: p.maxBodyBytes },
       });
     }
+    if (p.allowedRecipients.length > 0) {
+      const notAllowed = recipients.filter((r) => !p.allowedRecipients.includes(r.trim().toLowerCase()));
+      if (notAllowed.length > 0) {
+        // Count only: the addresses themselves are not echoed back.
+        throw new AppError(
+          'POLICY_BLOCKED',
+          'One or more recipients are not in the server policy allowlist.',
+          {
+            details: { blocked_recipient_count: notAllowed.length },
+          },
+        );
+      }
+    }
     const blocked = recipients.filter((r) => {
       const d = domainOf(r);
       if (p.blockedRecipientDomains.some((rule) => domainMatches(d, rule))) return true;
@@ -150,13 +180,25 @@ export class PolicyEngine {
     }
   }
 
-  checkDocsAppend(documentId: string, bytes: number): void {
+  /**
+   * Documents are writable/readable unless restricted. When `allowedDocumentIds` is non-empty or
+   * `restrictToCreatedDocuments` is on, only listed documents and documents this server created qualify.
+   */
+  private assertDocumentAllowed(documentId: string, createdByServer: boolean): void {
     const p = this.policy.googleDocs;
-    if (!p.append)
-      throw new AppError('POLICY_BLOCKED', 'Appending to Google Docs is disabled by server policy.');
-    if (p.allowedDocumentIds.length > 0 && !p.allowedDocumentIds.includes(documentId)) {
-      throw new AppError('POLICY_BLOCKED', 'This document is not in the server policy allowlist.');
+    const restricted = p.allowedDocumentIds.length > 0 || p.restrictToCreatedDocuments;
+    if (restricted && !createdByServer && !p.allowedDocumentIds.includes(documentId)) {
+      throw new AppError(
+        'POLICY_BLOCKED',
+        p.restrictToCreatedDocuments
+          ? 'Server policy only allows documents created by this server (or explicitly allowlisted).'
+          : 'This document is not in the server policy allowlist.',
+      );
     }
+  }
+
+  private assertAppendSize(bytes: number): void {
+    const p = this.policy.googleDocs;
     if (bytes > p.maxAppendBytes) {
       throw new AppError('POLICY_BLOCKED', `Appended content exceeds the ${p.maxAppendBytes}-byte limit.`, {
         details: { max_append_bytes: p.maxAppendBytes },
@@ -164,10 +206,23 @@ export class PolicyEngine {
     }
   }
 
-  checkDocsRead(documentId: string): void {
-    const p = this.policy.googleDocs;
-    if (p.allowedDocumentIds.length > 0 && !p.allowedDocumentIds.includes(documentId)) {
-      throw new AppError('POLICY_BLOCKED', 'This document is not in the server policy allowlist.');
+  checkDocsAppend(documentId: string, bytes: number, createdByServer = false): void {
+    if (!this.policy.googleDocs.append) {
+      throw new AppError('POLICY_BLOCKED', 'Appending to Google Docs is disabled by server policy.');
     }
+    this.assertDocumentAllowed(documentId, createdByServer);
+    this.assertAppendSize(bytes);
+  }
+
+  checkDocsRead(documentId: string, createdByServer = false): void {
+    this.assertDocumentAllowed(documentId, createdByServer);
+  }
+
+  /** `initialContentBytes` is checked against the same cap as appends. */
+  checkDocsCreate(initialContentBytes: number): void {
+    if (!this.policy.googleDocs.create) {
+      throw new AppError('POLICY_BLOCKED', 'Creating Google Docs is disabled by server policy.');
+    }
+    this.assertAppendSize(initialContentBytes);
   }
 }
