@@ -3,7 +3,7 @@
     "send": true,
     "maxRecipients": 1,
     "maxBodyBytes": 5000,
-    "requireConfirmation": true,
+    "requireConfirmation": false,
     "allowedRecipients": [
       "vaishu1996@gmail.com"
     ],

@@ -35,21 +35,20 @@ describe('weekly_note prompt', () => {
     expect(JSON.stringify(weekly)).not.toMatch(/claude|anthropic|chatgpt|openai|gemini/i);
   });
 
-  it('targets the configured recipient, the current week and a one-page plain-text note', async () => {
+  it('is fully automated by default: no approval step, email only', async () => {
     h = await createHarness({ env: { WEEKLY_NOTE_RECIPIENT: 'vaishu1996@gmail.com' } });
     const text = promptText(
       await h.client.getPrompt({ name: 'weekly_note', arguments: { notes: 'Shipped the MCP server.' } }),
     );
     expect(text).toContain('week of 2026-09-28');
-    expect(text).toContain('Send it to vaishu1996@gmail.com only.');
+    expect(text).toContain('1. Email it by calling gmail_send_email with:');
     expect(text).toContain('to: ["vaishu1996@gmail.com"]');
     expect(text).toContain('subject: "Weekly Note – Week of 2026-09-28"');
+    expect(text).toContain('   - body: the note\n');
     expect(text).toContain('idempotency_key: "weekly-note-2026-09-28"');
     expect(text).toContain(`at most ${WEEKLY_NOTE_MAX_CHARS} characters`);
-    expect(text).toContain('email it by calling gmail_send_email');
-    expect(text).toMatch(/Do not save or send it before they approve/);
-    // Without SUMMARY_DOC_ID there is no Google Docs step.
-    expect(text).not.toContain('google_docs_append');
+    expect(text).toContain('Send it to vaishu1996@gmail.com only. Do not ask the user for approval');
+    expect(text).not.toMatch(/approve|CONFIRMATION_REQUIRED|google_docs/);
     expect(text).toContain('<notes>\nShipped the MCP server.\n</notes>');
   });
 
@@ -58,9 +57,37 @@ describe('weekly_note prompt', () => {
     const text = promptText(
       await h.client.getPrompt({ name: 'weekly_note', arguments: { week_of: '2026-10-12' } }),
     );
-    expect(text).toContain('email it by calling gmail.send_email');
+    expect(text).toContain('Email it by calling gmail.send_email');
     expect(text).toContain('Weekly Note – Week of 2026-10-12');
     expect(text).toContain('Ask the user who should receive it before sending.');
+  });
+
+  it('under the deployed policy.json, creates a Doc and emails the note with its link, without approval', async () => {
+    h = await createHarness({
+      policy: deployedPolicy,
+      env: { WEEKLY_NOTE_RECIPIENT: 'vaishu1996@gmail.com' },
+    });
+    const text = promptText(await h.client.getPrompt({ name: 'weekly_note', arguments: {} }));
+    expect(text).toContain('1. Save it in a new Google Doc by calling google_docs_create with:');
+    expect(text).toContain('title: "Weekly Note – Week of 2026-09-28"');
+    expect(text).toContain('idempotency_key: "weekly-doc-2026-09-28"');
+    expect(text).toContain('2. Email it by calling gmail_send_email with:');
+    expect(text).toContain(
+      'body: the note, then a blank line, then "Google Doc: " followed by the document_url it returned',
+    );
+    expect(text).toMatch(/^3\. Send it to vaishu1996@gmail.com only\. Do not ask the user for approval/m);
+    expect(text).toContain('If the Google Doc step fails, still send the email without the link');
+    expect(text).toMatch(/^4\. Report the results \(Doc link, message ID\)/m);
+    expect(text).not.toMatch(/approve\b|CONFIRMATION_REQUIRED/);
+  });
+
+  it('adds approval steps back when policy requires confirmation', async () => {
+    h = await createHarness({ policy: { gmail: { requireConfirmation: true } } });
+    const text = promptText(await h.client.getPrompt({ name: 'weekly_note', arguments: {} }));
+    expect(text).toContain('1. Show the full note to the user and ask for approval or edits.');
+    expect(text).toContain('2. Email it by calling gmail_send_email');
+    expect(text).toContain('If a tool returns CONFIRMATION_REQUIRED');
+    expect(text).not.toContain('Do not ask the user for approval');
   });
 });
 
@@ -75,17 +102,19 @@ describe('weekly_note prompt with SUMMARY_DOC_ID', () => {
     const { prompts } = await h.client.listPrompts();
     expect(prompts.find((p) => p.name === 'weekly_note')!.description).toContain('google_docs_append');
     const text = promptText(await h.client.getPrompt({ name: 'weekly_note', arguments: {} }));
-    expect(text).toContain(
-      '2. After approval, add it to the weekly notes Google Doc by calling google_docs_append',
-    );
+    expect(text).toContain('1. Add it to the weekly notes Google Doc by calling google_docs_append');
     expect(text).toContain(`document_id: "${DOC_ID}"`);
     expect(text).toContain('heading: "Weekly Note – Week of 2026-09-28"');
     expect(text).toContain('separator: "double_newline"');
     expect(text).toContain('timestamp: true');
     expect(text).toContain('idempotency_key: "weekly-doc-2026-09-28"');
-    expect(text).toContain('3. Then email it by calling gmail_send_email');
+    expect(text).toContain('2. Email it by calling gmail_send_email');
+    expect(text).toContain(
+      `body: the note, then a blank line, then "Google Doc: " followed by https://docs.google.com/document/d/${DOC_ID}/edit`,
+    );
     expect(text.indexOf('google_docs_append')).toBeLessThan(text.indexOf('gmail_send_email'));
-    expect(text).toMatch(/^5\. If one step fails/m);
+    expect(text).toContain('If the Google Doc step fails, still send the email without the link');
+    expect(text).not.toContain('google_docs_create');
   });
 
   it('adds the note to the end of the Doc without a confirmation step under the deployed policy', async () => {
@@ -136,17 +165,10 @@ describe('weekly note delivery under the deployed policy.json', () => {
     ...extra,
   });
 
-  it('sends a one-page note to vaishu1996@gmail.com after confirmation, exactly once', async () => {
+  it('sends a one-page note to vaishu1996@gmail.com without confirmation, exactly once', async () => {
     h = await createHarness({ policy: deployedPolicy });
-    const first = await h.call('gmail.send_email', args(note(WEEKLY_NOTE_MAX_CHARS)));
-    expect(first.structuredContent).toMatchObject({ error: { code: 'CONFIRMATION_REQUIRED' } });
-    expect(h.gmail.sent).toHaveLength(0);
-
-    const token = first.structuredContent!.error.details.confirmation_token;
-    const sent = await h.call(
-      'gmail.send_email',
-      args(note(WEEKLY_NOTE_MAX_CHARS), { confirmation_token: token }),
-    );
+    // Unattended weekly runs: no confirmation step, the recipient allowlist is the guard.
+    const sent = await h.call('gmail.send_email', args(note(WEEKLY_NOTE_MAX_CHARS)));
     expect(sent.structuredContent).toMatchObject({ success: true, recipients: ['vaishu1996@gmail.com'] });
     expect(h.gmail.sent).toHaveLength(1);
     const mime = h.gmail.decoded();
@@ -154,14 +176,7 @@ describe('weekly note delivery under the deployed policy.json', () => {
     expect(mime).toContain('Content-Type: text/plain; charset="UTF-8"');
 
     // A retry of the same week's note returns the original result instead of sending again.
-    const again = await h.call('gmail.send_email', args(note(WEEKLY_NOTE_MAX_CHARS)));
-    expect(again.structuredContent).toMatchObject({ error: { code: 'CONFIRMATION_REQUIRED' } });
-    const replay = await h.call(
-      'gmail.send_email',
-      args(note(WEEKLY_NOTE_MAX_CHARS), {
-        confirmation_token: again.structuredContent!.error.details.confirmation_token,
-      }),
-    );
+    const replay = await h.call('gmail.send_email', args(note(WEEKLY_NOTE_MAX_CHARS)));
     expect(replay.structuredContent).toMatchObject({ idempotent_replay: true });
     expect(h.gmail.sent).toHaveLength(1);
   });

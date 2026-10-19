@@ -46,15 +46,20 @@ Input that fails schema validation, such as a missing required field, an unknown
 The server provides an MCP prompt, `weekly_note`, which MCP apps show as a ready-made command. It has three optional arguments: `notes` (your raw updates), `week_of` (a Monday, `YYYY-MM-DD`) and `recipient`. The prompt tells the AI app to:
 
 1. write a plain-text, one-page note (at most 3,500 characters) with the sections Highlights, Progress, Challenges / Risks and Next Week
-2. show it to you for approval
-3. if `SUMMARY_DOC_ID` is set, add it to the end of that Google Doc with `google_docs_append`, under the heading `Weekly Note – Week of <Monday> — <date and time>` and separated from the previous entry by a blank line (idempotency key `weekly-doc-<Monday>`)
-4. email it with `gmail_send_email` to `WEEKLY_NOTE_RECIPIENT`, with the subject `Weekly Note – Week of <Monday>` (idempotency key `weekly-note-<Monday>`)
+2. save it in a Google Doc (idempotency key `weekly-doc-<Monday>`):
+   - if `SUMMARY_DOC_ID` is set, add it to the end of that Doc with `google_docs_append`, under the heading `Weekly Note – Week of <Monday> — <date and time>`
+   - otherwise, if `googleDocs.create` is on, create a new Doc titled `Weekly Note – Week of <Monday>` with `google_docs_create`
+3. email it with `gmail_send_email` to `WEEKLY_NOTE_RECIPIENT`, with the subject `Weekly Note – Week of <Monday>`, ending with `Google Doc: <link>` (idempotency key `weekly-note-<Monday>`)
+
+The steps follow `policy.json`. With confirmation off (the deployed setting), the prompt tells the AI app to run straight through without asking for approval, so weekly runs can be fully unattended. If you turn `requireConfirmation` back on, the prompt adds a "show the note and ask for approval" step.
+
+These names are suggestions for the prompt only. An agent that calls the tools directly chooses its own subject, body and Doc title.
 
 The AI app writes the note; the server never generates content. The server enforces the rules through [policy.json](policy.json):
 
 - Only `vaishu1996@gmail.com` can receive mail (`allowedRecipients`, `maxRecipients: 1`).
 - The email body is capped at 5,000 bytes (`maxBodyBytes`), so a note longer than about one page is rejected.
-- Every email needs confirmation (`gmail.requireConfirmation`). Doc appends don't (`googleDocs.requireConfirmation: false`), because appends never change existing text.
+- No confirmation step for email, Doc creation or appends (`requireConfirmation: false` in both sections), so runs are unattended. The recipient allowlist, size cap and Doc restrictions below are what keep unattended runs safe.
 - `googleDocs.create: true` lets the agent create Docs with `google_docs_create`. With `restrictToCreatedDocuments: true`, the server can only read or append to Docs it created itself, plus any listed in `allowedDocumentIds`. Your other documents stay out of reach.
 - Alternatively, put an existing Doc's ID in `googleDocs.allowedDocumentIds` and set `SUMMARY_DOC_ID` to it.
 

@@ -98,7 +98,9 @@ describe('PolicyEngine', () => {
     expect(() => engine.checkGmailSend(['anyone.else@gmail.com'], 10)).toThrowError(
       expect.objectContaining({ code: 'POLICY_BLOCKED' }),
     );
-    expect(engine.policy.gmail.requireConfirmation).toBe(true);
+    // Unattended weekly sends: no confirmation, but only to the single allowlisted address.
+    expect(engine.policy.gmail.requireConfirmation).toBe(false);
+    expect(engine.policy.gmail.maxRecipients).toBe(1);
   });
 
   it('enforces document allowlists, size limits and kill switches', () => {

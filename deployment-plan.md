@@ -59,7 +59,7 @@ stdio and Docker keep their file and in-memory stores. HTTP mode switches to Red
 | [api/index.js](api/index.js) | The function: `export default createVercelHandler()` from `dist/`. It reads no `.env` file. |
 | [vercel.json](vercel.json) | `npm run build`, rewrite of every path to `/api`, `maxDuration: 60`, `includeFiles: policy.json`, `outputDirectory: public`. |
 | [public/robots.txt](public/robots.txt) | Static output directory Vercel requires when a build command is set; tells crawlers to stay away. |
-| [policy.json](policy.json) | Deployment policy: confirmation required for send and append, `token_only`, max 5 recipients. **Fill in `allowedRecipientDomains` and `allowedDocumentIds` before deploying.** Empty lists mean no restriction. |
+| [policy.json](policy.json) | Deployment policy: no confirmation for send, create or append, so weekly runs are unattended. Mail is limited to `allowedRecipients` (`vaishu1996@gmail.com`), 1 recipient and 5,000 bytes; Docs writes are limited to server-created Docs. |
 | [.vercelignore](.vercelignore) | Keeps `.env*`, `.data/`, token files, `node_modules/`, `dist/` and `tests/` out of uploads. |
 | `package.json` | Added the `@upstash/redis` dependency. |
 
@@ -154,8 +154,7 @@ Or push to a private GitHub repo and import it in Vercel. Before the first commi
 | `google_docs_create` with a title and content | `success: true` with a `document_id` (no confirmation: `googleDocs.requireConfirmation` is `false`) |
 | `google_docs_append` to that `document_id` | `success: true`; the text is at the end of the Doc |
 | `google_docs_append` to a Doc the server didn't create | `POLICY_BLOCKED` (`restrictToCreatedDocuments`) |
-| `gmail_send_email` to `vaishu1996@gmail.com` | `CONFIRMATION_REQUIRED` → repeat with `confirmation_token` → `success: true` |
-| Same `confirmation_token` again | `confirmation_token is invalid, expired, or already used` |
+| `gmail_send_email` to `vaishu1996@gmail.com` | `success: true` straight away (no confirmation: `gmail.requireConfirmation` is `false`) |
 | `gmail_send_email` to an allowed address, then the identical call again | sent once; second call → `DUPLICATE_REQUEST` |
 | Send to any address other than `vaishu1996@gmail.com`, or a body over 5,000 bytes | `POLICY_BLOCKED` |
 | Redeploy, then `connection_get_status` | still authorized (token is in Redis) |
