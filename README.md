@@ -92,6 +92,19 @@ The idempotency keys mean that retrying a week's note within `IDEMPOTENCY_TTL_SE
 
 The MCP tools depend only on the narrow `GmailApi`, `DocsApi`, `TokenStore`, `IdempotencyStore` and `AuditSink` interfaces. Storage backends and Google adapters can be swapped without touching tool code. New tools are added to `TOOLS` in [src/server/mcpServer.ts](src/server/mcpServer.ts).
 
+## Tech stack
+
+| Area | Technology |
+|---|---|
+| Language and runtime | TypeScript (ES modules) on Node.js 20+ |
+| MCP | `@modelcontextprotocol/server` and `@modelcontextprotocol/node`, over stdio or Streamable HTTP |
+| Google APIs | `@googleapis/gmail`, `@googleapis/docs`, `google-auth-library` (OAuth 2.0 + PKCE) |
+| Validation | `zod` schemas for tool inputs and configuration |
+| Storage | Encrypted local files (AES-256-GCM) by default; Upstash Redis (`@upstash/redis`) for serverless deployments |
+| Observability | Structured JSON logs and a built-in Prometheus-format `/metrics` endpoint (no extra libraries) |
+| Deployment | Vercel serverless function ([api/index.js](api/index.js), [vercel.json](vercel.json)) or Docker on `node:22-alpine` |
+| Tooling | Vitest, ESLint (`typescript-eslint`), Prettier, `tsc` |
+
 ## Google Cloud setup
 
 1. Create or select a project at <https://console.cloud.google.com>.
